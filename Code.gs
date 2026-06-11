@@ -183,6 +183,7 @@ function installActivityTrigger() {
   ScriptApp.newTrigger('createNextActivityDate')
     .timeBased()
     .atHour(20)
+    .nearMinute(0)
     .everyDays(1)
     .inTimezone('Asia/Bangkok')
     .create();
