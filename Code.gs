@@ -220,7 +220,7 @@ function getActivitySpreadsheet_() {
   // Container-bound scripts should use their parent spreadsheet directly.
   const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   if (activeSpreadsheet &&
-      activeSpreadsheet.getId() === ACTIVITY_SPREADSHEET_ID) {
+      activeSpreadsheet.getSheetByName(ACTIVITY_SHEET_NAME)) {
     return activeSpreadsheet;
   }
 
