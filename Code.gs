@@ -12,6 +12,42 @@ const ACTIVITY_TIME_SLOTS = [
   '15:00 - 16:00'
 ];
 
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('Activity Tools')
+    .addItem('สร้างข้อมูลวันพรุ่งนี้', 'createNextActivityDateManual')
+    .addItem('ติดตั้งทริกเกอร์ 20:00', 'installActivityTriggerManual')
+    .addToUi();
+}
+
+function createNextActivityDateManual() {
+  const ui = SpreadsheetApp.getUi();
+  const answer = ui.alert(
+    'สร้างข้อมูลวันพรุ่งนี้',
+    'ต้องการสร้างข้อมูลวันพรุ่งนี้ในชีต Activity พงศ์พลหรือไม่?',
+    ui.ButtonSet.YES_NO
+  );
+  if (answer !== ui.Button.YES) return;
+
+  try {
+    const result = createNextActivityDate();
+    ui.alert(result.message);
+  } catch (error) {
+    ui.alert('สร้างข้อมูลไม่สำเร็จ: ' + error.message);
+    throw error;
+  }
+}
+
+function installActivityTriggerManual() {
+  try {
+    installActivityTrigger();
+    SpreadsheetApp.getUi().alert('ติดตั้งทริกเกอร์ใกล้เวลา 20:00 เรียบร้อยแล้ว');
+  } catch (error) {
+    SpreadsheetApp.getUi().alert('ติดตั้งทริกเกอร์ไม่สำเร็จ: ' + error.message);
+    throw error;
+  }
+}
+
 /** Run once to generate a webhook secret, then set the token in Script Properties. */
 function setup() {
   const properties = PropertiesService.getScriptProperties();
@@ -129,7 +165,10 @@ function createNextActivityDate() {
   });
   if (alreadyExists) {
     console.log('Activity rows already exist for ' + tomorrowKey);
-    return;
+    return {
+      created: false,
+      message: 'มีข้อมูลวันที่ ' + formatThaiDate_(tomorrow, timezone) + ' อยู่แล้ว'
+    };
   }
 
   const startRow = lastDataRow + 1;
@@ -170,6 +209,11 @@ function createNextActivityDate() {
   sheet.getRange(startRow, 2, rows.length, 1).setNumberFormat('d/m/yyyy');
   console.log('Created activity rows for ' + tomorrowKey + ' at rows ' +
     startRow + '-' + requiredLastRow);
+  return {
+    created: true,
+    message: 'สร้างข้อมูลวันที่ ' + formatThaiDate_(tomorrow, timezone) +
+      ' เรียบร้อยแล้ว (แถว ' + startRow + '-' + requiredLastRow + ')'
+  };
 }
 
 /** Run once manually to install the daily trigger around 20:00 Bangkok time. */
@@ -203,4 +247,8 @@ function findLastActivityRow_(sheet) {
     }
   }
   return firstDataRow - 1;
+}
+
+function formatThaiDate_(date, timezone) {
+  return Utilities.formatDate(date, timezone, 'd/M/yyyy');
 }
