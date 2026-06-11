@@ -70,3 +70,14 @@ Apps Script web app ไม่เปิด request headers ให้ `doPost(e)` 
 `x-line-signature` ได้ตามแนวทางมาตรฐานของ LINE โครงนี้จึงใช้ `WEBHOOK_SECRET` ใน URL
 ช่วยจำกัดการเรียก endpoint หากต้องการตรวจลายเซ็นเต็มรูปแบบ ควรใช้ GitHub สำหรับเก็บ
 source code และ deploy webhook บน Cloud Run, Cloud Functions หรือบริการที่อ่าน headers ได้
+
+## สร้างวันที่ใน Activity พงศ์พล ทุก 20:00
+
+ฟังก์ชัน `createNextActivityDate()` จะสร้างข้อมูลของวันพรุ่งนี้จำนวน 8 แถวในชีต
+`Activity พงศ์พล` โดยคัดลอกรูปแบบจากบล็อกล่าสุด ใส่เลขลำดับต่อเนื่อง ช่วงเวลา
+08:00-16:00 ค่าเริ่มต้น `ว่าง` และ `พักกลางวัน` ในช่วง 12:00-13:00
+
+หลังนำโค้ดขึ้น Apps Script เวอร์ชันล่าสุดแล้ว ให้เลือกฟังก์ชัน
+`installActivityTrigger` และกด Run หนึ่งครั้ง พร้อมยอมรับสิทธิ์เข้าถึง Google Sheets
+ระบบจะติดตั้ง trigger รายวันเวลาประมาณ 20:00 ตามเขตเวลา Asia/Bangkok และป้องกัน
+การสร้างวันที่ซ้ำไว้แล้ว
