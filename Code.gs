@@ -144,7 +144,7 @@ function jsonResponse_(body) {
  * Run installActivityTrigger() once to schedule this function every day.
  */
 function createNextActivityDate() {
-  const spreadsheet = SpreadsheetApp.openById(ACTIVITY_SPREADSHEET_ID);
+  const spreadsheet = getActivitySpreadsheet_();
   const sheet = spreadsheet.getSheetByName(ACTIVITY_SHEET_NAME);
   if (!sheet) throw new Error('Sheet not found: ' + ACTIVITY_SHEET_NAME);
 
@@ -214,6 +214,17 @@ function createNextActivityDate() {
     message: 'สร้างข้อมูลวันที่ ' + formatThaiDate_(tomorrow, timezone) +
       ' เรียบร้อยแล้ว (แถว ' + startRow + '-' + requiredLastRow + ')'
   };
+}
+
+function getActivitySpreadsheet_() {
+  // Container-bound scripts should use their parent spreadsheet directly.
+  const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  if (activeSpreadsheet &&
+      activeSpreadsheet.getId() === ACTIVITY_SPREADSHEET_ID) {
+    return activeSpreadsheet;
+  }
+
+  return SpreadsheetApp.openById(ACTIVITY_SPREADSHEET_ID);
 }
 
 /** Run once manually to install the daily trigger around 20:00 Bangkok time. */
