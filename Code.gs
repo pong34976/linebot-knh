@@ -174,15 +174,12 @@ function jsonResponse_(body) {
 function createNextActivityDate() {
   const spreadsheet = getActivitySpreadsheet_();
   const timezone = spreadsheet.getSpreadsheetTimeZone() || 'Asia/Bangkok';
-  const tomorrow = new Date();
-  tomorrow.setHours(12, 0, 0, 0);
-  tomorrow.setDate(tomorrow.getDate() + 1);
   const results = [];
 
   spreadsheet.getSheets().forEach(function(sheet) {
     if (!isActivitySheet_(sheet)) return;
     try {
-      results.push(createNextActivityDateForSheet_(sheet, tomorrow, timezone));
+      results.push(createNextActivityDateForSheet_(sheet, timezone));
     } catch (error) {
       console.error(sheet.getName() + ': ' + (error.stack || error));
       results.push({
@@ -204,10 +201,13 @@ function createNextActivityDate() {
     return !result.created && result.reason !== 'มีวันที่แล้ว';
   }).map(function(result) { return result.sheet + ': ' + result.reason; });
   const messageLines = [
-    'วันที่ ' + formatThaiDate_(tomorrow, timezone),
     'สร้างแล้ว ' + createdCount + ' ชีต'
   ];
-  if (createdNames.length) messageLines.push('✓ ' + createdNames.join(', '));
+  if (createdNames.length) {
+    results.filter(function(result) { return result.created; }).forEach(function(result) {
+      messageLines.push('✓ ' + result.sheet + ' → ' + result.date);
+    });
+  }
   if (existingNames.length) messageLines.push('มีอยู่แล้ว: ' + existingNames.join(', '));
   if (failedDetails.length) messageLines.push('ผิดพลาด:\n' + failedDetails.join('\n'));
   return {
@@ -217,8 +217,7 @@ function createNextActivityDate() {
   };
 }
 
-function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
-  const tomorrowKey = Utilities.formatDate(tomorrow, timezone, 'yyyy-MM-dd');
+function createNextActivityDateForSheet_(sheet, timezone) {
   const firstDataRow = findActivityFirstDataRow_(sheet);
   const template = findLatestActivityDayBlock_(
     sheet, firstDataRow, sheet.getLastRow(), timezone
@@ -226,6 +225,9 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
   if (!template) {
     return { sheet: sheet.getName(), created: false, reason: 'ไม่มีข้อมูลต้นแบบ' };
   }
+  const nextDate = dateFromKey_(template.dateKey);
+  nextDate.setDate(nextDate.getDate() + 1);
+  const nextDateKey = Utilities.formatDate(nextDate, timezone, 'yyyy-MM-dd');
   const lastDataRow = template.startRow + template.rowCount - 1;
 
   const existingDates = sheet.getRange(
@@ -236,7 +238,7 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
     if (row[0] instanceof Date || String(row[0] || '').trim()) {
       currentDateKey = normalizeSheetDate_(row[0], timezone);
     }
-    return currentDateKey === tomorrowKey;
+    return currentDateKey === nextDateKey;
   });
   if (alreadyExists) {
     return { sheet: sheet.getName(), created: false, reason: 'มีวันที่แล้ว' };
@@ -274,7 +276,7 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
     // Preserve each sheet's convention: date on every row or first row only.
     const templateDate = templateCoreValues[index][1];
     dateValues.push([index === 0 || template.dateOnEveryRow || templateDate ?
-      new Date(tomorrow) : '']);
+      new Date(nextDate) : '']);
   }
   sheet.getRange(startRow, 1, rowCount, 1).setValues(sequenceValues);
   sheet.getRange(startRow, 2, rowCount, 1).setValues(dateValues).setNumberFormat('d/m/yyyy');
@@ -285,7 +287,12 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
     sheet.getRange(startRow, 3, rowCount, 1).setValues(timeValues);
   }
 
-  return { sheet: sheet.getName(), created: true, rows: rowCount };
+  return {
+    sheet: sheet.getName(),
+    created: true,
+    rows: rowCount,
+    date: formatThaiDate_(nextDate, timezone)
+  };
 }
 
 function getActivitySpreadsheet_() {
@@ -485,9 +492,15 @@ function findLatestActivityDayBlock_(sheet, firstDataRow, lastDataRow, timezone)
   return {
     startRow: firstDataRow + latestStartIndex,
     rowCount: rowCount,
+    dateKey: latestBlock.dateKey,
     dateOnEveryRow: dateOnEveryRow,
     hasTimeColumn: hasTimeColumn
   };
+}
+
+function dateFromKey_(dateKey) {
+  const parts = String(dateKey).split('-').map(Number);
+  return new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0, 0);
 }
 
 function findMaxSequence_(sheet, firstDataRow) {
