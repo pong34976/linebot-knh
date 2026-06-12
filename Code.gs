@@ -344,12 +344,19 @@ function checkDailyActivityAndNotify() {
   });
 
   if (!missingNames.length) {
-    const completeMessage = 'ทุกคนบันทึก Activity วันนี้เรียบร้อยแล้ว ไม่ส่ง LINE';
+    const completeMessage = '✅ ทีม IT บันทึก Activity ครบเรียบร้อยแล้ว\nวันที่ ' +
+      Utilities.formatDate(today, timezone, 'd/M/yyyy');
+    const reportUserId = PropertiesService.getScriptProperties()
+      .getProperty('ACTIVITY_REPORT_LINE_USER_ID');
+    if (!reportUserId) {
+      throw new Error('ACTIVITY_REPORT_LINE_USER_ID is not configured');
+    }
+    pushText_(reportUserId, completeMessage);
     console.log(completeMessage);
     return {
       missing: [],
       completed: completedNames,
-      sent: false,
+      sent: true,
       message: completeMessage
     };
   }
