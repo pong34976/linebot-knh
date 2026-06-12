@@ -343,13 +343,23 @@ function checkDailyActivityAndNotify() {
     }
   });
 
-  const lines = ['🔔 แจ้งเตือนการลง Activity', ''];
-  if (missingNames.length) {
-    lines.push('ผู้ใช้งานที่ยังไม่ได้บันทึก Activity วันนี้');
-    missingNames.forEach(function(name) { lines.push('• ' + name); });
-  } else {
-    lines.push('ผู้ใช้งานทุกคนบันทึก Activity วันนี้เรียบร้อยแล้ว');
+  if (!missingNames.length) {
+    const completeMessage = 'ทุกคนบันทึก Activity วันนี้เรียบร้อยแล้ว ไม่ส่ง LINE';
+    console.log(completeMessage);
+    return {
+      missing: [],
+      completed: completedNames,
+      sent: false,
+      message: completeMessage
+    };
   }
+
+  const lines = [
+    '🔔 แจ้งเตือนการลง Activity',
+    '',
+    'ผู้ใช้งานที่ยังไม่ได้บันทึก Activity วันนี้'
+  ];
+  missingNames.forEach(function(name) { lines.push('• ' + name); });
 
   const message = lines.join('\n');
   const reportUserId = PropertiesService.getScriptProperties()
@@ -359,7 +369,12 @@ function checkDailyActivityAndNotify() {
   }
   pushText_(reportUserId, message);
   console.log(message);
-  return { missing: missingNames, completed: completedNames, message: message };
+  return {
+    missing: missingNames,
+    completed: completedNames,
+    sent: true,
+    message: message
+  };
 }
 
 function getActivityStatusForDate_(sheet, targetDateKey, timezone) {
