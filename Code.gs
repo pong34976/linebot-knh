@@ -198,13 +198,16 @@ function createNextActivityDate() {
 function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
   const tomorrowKey = Utilities.formatDate(tomorrow, timezone, 'yyyy-MM-dd');
   const firstDataRow = findActivityFirstDataRow_(sheet);
-  const lastDataRow = findLastActivityRow_(sheet, firstDataRow);
-  if (lastDataRow < firstDataRow) {
+  const template = findLatestActivityDayBlock_(
+    sheet, firstDataRow, sheet.getLastRow(), timezone
+  );
+  if (!template) {
     return { sheet: sheet.getName(), created: false, reason: 'ไม่มีข้อมูลต้นแบบ' };
   }
+  const lastDataRow = template.startRow + template.rowCount - 1;
 
   const existingDates = sheet.getRange(
-    firstDataRow, 2, lastDataRow - firstDataRow + 1, 1
+    firstDataRow, 2, Math.max(1, sheet.getLastRow() - firstDataRow + 1), 1
   ).getValues();
   let currentDateKey = '';
   const alreadyExists = existingDates.some(function(row) {
@@ -215,11 +218,6 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
   });
   if (alreadyExists) {
     return { sheet: sheet.getName(), created: false, reason: 'มีวันที่แล้ว' };
-  }
-
-  const template = findLatestActivityDayBlock_(sheet, firstDataRow, lastDataRow, timezone);
-  if (!template) {
-    return { sheet: sheet.getName(), created: false, reason: 'หาแบบวันล่าสุดไม่ได้' };
   }
 
   const rowCount = template.rowCount;
@@ -236,11 +234,17 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
   source.copyTo(target, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
   target.clearContent();
 
-  const lastSequence = Number(sheet.getRange(lastDataRow, 1).getValue()) || 0;
+  const sequenceSource = sheet.getRange(
+    template.startRow, 1, rowCount, 1
+  ).getValues();
+  const templateUsesSequence = sequenceSource.some(function(row) {
+    return typeof row[0] === 'number' && row[0] > 0;
+  });
+  const lastSequence = templateUsesSequence ? findMaxSequence_(sheet, firstDataRow) : 0;
   const sequenceValues = [];
   const dateValues = [];
   for (let index = 0; index < rowCount; index++) {
-    sequenceValues.push([lastSequence + index + 1]);
+    sequenceValues.push([templateUsesSequence ? lastSequence + index + 1 : '']);
     // Preserve each sheet's convention: date on every row or first row only.
     const templateDate = sheet.getRange(template.startRow + index, 2).getValue();
     dateValues.push([index === 0 || template.dateOnEveryRow || templateDate ?
@@ -398,27 +402,27 @@ function findLatestActivityDayBlock_(sheet, firstDataRow, lastDataRow, timezone)
   const dateValues = sheet.getRange(
     firstDataRow, 2, lastDataRow - firstDataRow + 1, 1
   ).getValues();
-  let latestDateKey = '';
-  for (let index = dateValues.length - 1; index >= 0; index--) {
-    latestDateKey = normalizeSheetDate_(dateValues[index][0], timezone);
-    if (latestDateKey) break;
-  }
-  if (!latestDateKey) return null;
-
-  let latestStartIndex = dateValues.length - 1;
+  const dateBlocks = [];
   let currentDateKey = '';
   for (let index = 0; index < dateValues.length; index++) {
     const explicitDateKey = normalizeSheetDate_(dateValues[index][0], timezone);
-    if (explicitDateKey) currentDateKey = explicitDateKey;
-    if (currentDateKey === latestDateKey) {
-      latestStartIndex = index;
-      break;
+    if (explicitDateKey && explicitDateKey !== currentDateKey) {
+      currentDateKey = explicitDateKey;
+      dateBlocks.push({ dateKey: explicitDateKey, startIndex: index });
     }
   }
+  if (!dateBlocks.length) return null;
 
-  const endIndex = dateValues.length;
-  const rowCount = endIndex - latestStartIndex;
-  const dateOnEveryRow = dateValues.slice(latestStartIndex)
+  const latestBlock = dateBlocks[dateBlocks.length - 1];
+  let rowCount = 0;
+  if (dateBlocks.length > 1) {
+    rowCount = latestBlock.startIndex - dateBlocks[dateBlocks.length - 2].startIndex;
+  }
+  // Activity sheets normally have 8 rows/day. Reject implausible gaps caused by old data.
+  if (rowCount < 1 || rowCount > 24) rowCount = 8;
+
+  const latestStartIndex = latestBlock.startIndex;
+  const dateOnEveryRow = dateValues.slice(latestStartIndex, latestStartIndex + rowCount)
     .every(function(row) { return Boolean(normalizeSheetDate_(row[0], timezone)); });
   const headerValues = sheet.getRange(1, 1, Math.min(10, sheet.getLastRow()), 3)
     .getDisplayValues();
@@ -431,6 +435,15 @@ function findLatestActivityDayBlock_(sheet, firstDataRow, lastDataRow, timezone)
     dateOnEveryRow: dateOnEveryRow,
     hasTimeColumn: hasTimeColumn
   };
+}
+
+function findMaxSequence_(sheet, firstDataRow) {
+  const rowCount = Math.max(1, sheet.getLastRow() - firstDataRow + 1);
+  const values = sheet.getRange(firstDataRow, 1, rowCount, 1).getValues();
+  return values.reduce(function(maxValue, row) {
+    const value = Number(row[0]);
+    return Number.isFinite(value) && value > maxValue ? value : maxValue;
+  }, 0);
 }
 
 function normalizeSheetDate_(value, timezone) {
