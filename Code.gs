@@ -260,6 +260,7 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
   // cleared immediately afterwards, reducing service calls across many sheets.
   source.copyTo(target, SpreadsheetApp.CopyPasteType.PASTE_NORMAL, false);
   target.clearContent();
+  target.setBorder(true, true, true, true, true, true);
 
   const templateCoreValues = sheet.getRange(
     templateStartRow, 1, rowCount, 3
