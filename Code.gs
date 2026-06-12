@@ -43,11 +43,11 @@ function createNextActivityDateManual() {
 function installActivityTriggerManual() {
   try {
     installActivityTrigger();
-    SpreadsheetApp.getUi().alert(
+    showActivityMessage_(
       'ติดตั้งทริกเกอร์สร้างวันพรุ่งนี้เวลา 18:00 และตรวจ Activity เวลา 20:00 เรียบร้อยแล้ว'
     );
   } catch (error) {
-    SpreadsheetApp.getUi().alert('ติดตั้งทริกเกอร์ไม่สำเร็จ: ' + error.message);
+    showActivityMessage_('ติดตั้งทริกเกอร์ไม่สำเร็จ: ' + error.message);
     throw error;
   }
 }
@@ -408,4 +408,10 @@ function findLastActivityRow_(sheet) {
 
 function formatThaiDate_(date, timezone) {
   return Utilities.formatDate(date, timezone, 'd/M/yyyy');
+}
+
+function showActivityMessage_(message) {
+  console.log(message);
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  if (spreadsheet) spreadsheet.toast(message, 'Activity Tools', 8);
 }

@@ -86,6 +86,9 @@ user ID ที่กำหนดไว้ใน Script Properties
 ระบบจะติดตั้ง trigger ทั้งเวลา 18:00 และ 20:00 ตามเขตเวลา Asia/Bangkok และป้องกัน
 การสร้างวันที่ซ้ำไว้แล้ว ต้องมีค่าเหล่านี้ใน Script Properties:
 
+ให้รัน `installActivityTrigger` จากหน้า Apps Script โดยตรง ไม่จำเป็นต้องรันฟังก์ชัน
+ที่ลงท้ายด้วย `Manual` ซึ่งมีไว้เรียกจากเมนูใน Google Sheets
+
 | Property | Value |
 | --- | --- |
 | `LINE_CHANNEL_ACCESS_TOKEN` | Channel access token |
