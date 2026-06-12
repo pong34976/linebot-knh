@@ -174,12 +174,15 @@ function jsonResponse_(body) {
 function createNextActivityDate() {
   const spreadsheet = getActivitySpreadsheet_();
   const timezone = spreadsheet.getSpreadsheetTimeZone() || 'Asia/Bangkok';
+  const tomorrow = new Date();
+  tomorrow.setHours(12, 0, 0, 0);
+  tomorrow.setDate(tomorrow.getDate() + 1);
   const results = [];
 
   spreadsheet.getSheets().forEach(function(sheet) {
     if (!isActivitySheet_(sheet)) return;
     try {
-      results.push(createNextActivityDateForSheet_(sheet, timezone));
+      results.push(createNextActivityDateForSheet_(sheet, tomorrow, timezone));
     } catch (error) {
       console.error(sheet.getName() + ': ' + (error.stack || error));
       results.push({
@@ -217,7 +220,8 @@ function createNextActivityDate() {
   };
 }
 
-function createNextActivityDateForSheet_(sheet, timezone) {
+function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
+  const tomorrowKey = Utilities.formatDate(tomorrow, timezone, 'yyyy-MM-dd');
   const firstDataRow = findActivityFirstDataRow_(sheet);
   const template = findLatestActivityDayBlock_(
     sheet, firstDataRow, sheet.getLastRow(), timezone
@@ -225,11 +229,6 @@ function createNextActivityDateForSheet_(sheet, timezone) {
   if (!template) {
     return { sheet: sheet.getName(), created: false, reason: 'ไม่มีข้อมูลต้นแบบ' };
   }
-  const nextDate = dateFromKey_(template.dateKey);
-  nextDate.setDate(nextDate.getDate() + 1);
-  const nextDateKey = Utilities.formatDate(nextDate, timezone, 'yyyy-MM-dd');
-  const lastDataRow = template.startRow + template.rowCount - 1;
-
   const existingDates = sheet.getRange(
     firstDataRow, 2, Math.max(1, sheet.getLastRow() - firstDataRow + 1), 1
   ).getValues();
@@ -238,7 +237,7 @@ function createNextActivityDateForSheet_(sheet, timezone) {
     if (row[0] instanceof Date || String(row[0] || '').trim()) {
       currentDateKey = normalizeSheetDate_(row[0], timezone);
     }
-    return currentDateKey === nextDateKey;
+    return currentDateKey === tomorrowKey;
   });
   if (alreadyExists) {
     return { sheet: sheet.getName(), created: false, reason: 'มีวันที่แล้ว' };
@@ -246,7 +245,8 @@ function createNextActivityDateForSheet_(sheet, timezone) {
 
   // All Activity sheets use eight working-hour rows per day.
   const rowCount = 8;
-  const startRow = lastDataRow + 1;
+  // Append after the physical last row, regardless of the sheet's latest date.
+  const startRow = sheet.getLastRow() + 1;
   const requiredLastRow = startRow + rowCount - 1;
   if (requiredLastRow > sheet.getMaxRows()) {
     sheet.insertRowsAfter(sheet.getMaxRows(), requiredLastRow - sheet.getMaxRows());
@@ -276,7 +276,7 @@ function createNextActivityDateForSheet_(sheet, timezone) {
     // Preserve each sheet's convention: date on every row or first row only.
     const templateDate = templateCoreValues[index][1];
     dateValues.push([index === 0 || template.dateOnEveryRow || templateDate ?
-      new Date(nextDate) : '']);
+      new Date(tomorrow) : '']);
   }
   sheet.getRange(startRow, 1, rowCount, 1).setValues(sequenceValues);
   sheet.getRange(startRow, 2, rowCount, 1).setValues(dateValues).setNumberFormat('d/m/yyyy');
@@ -291,7 +291,7 @@ function createNextActivityDateForSheet_(sheet, timezone) {
     sheet: sheet.getName(),
     created: true,
     rows: rowCount,
-    date: formatThaiDate_(nextDate, timezone)
+    date: formatThaiDate_(tomorrow, timezone)
   };
 }
 
@@ -498,10 +498,6 @@ function findLatestActivityDayBlock_(sheet, firstDataRow, lastDataRow, timezone)
   };
 }
 
-function dateFromKey_(dateKey) {
-  const parts = String(dateKey).split('-').map(Number);
-  return new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0, 0);
-}
 
 function findMaxSequence_(sheet, firstDataRow) {
   const rowCount = Math.max(1, sheet.getLastRow() - firstDataRow + 1);
