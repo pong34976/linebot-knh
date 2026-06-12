@@ -1,6 +1,16 @@
 const LINE_REPLY_URL = 'https://api.line.me/v2/bot/message/reply';
 const LINE_PUSH_URL = 'https://api.line.me/v2/bot/message/push';
 const ACTIVITY_SHEET_PREFIX = 'Activity ';
+const ACTIVITY_TIME_SLOTS = [
+  '8:00 - 9:00',
+  '9:00 - 10:00',
+  '10:00 - 11:00',
+  '11:00 - 12:00',
+  '12:00 - 13:00',
+  '13:00 - 14:00',
+  '14:00 - 15:00',
+  '15:00 - 16:00'
+];
 
 function onOpen() {
   SpreadsheetApp.getUi()
@@ -229,34 +239,7 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
   if (!template) {
     return { sheet: sheet.getName(), created: false, reason: 'ไม่มีข้อมูลต้นแบบ' };
   }
-  const existingDates = sheet.getRange(
-    firstDataRow, 2, Math.max(1, sheet.getLastRow() - firstDataRow + 1), 1
-  ).getValues();
-  const existingDateIndex = existingDates.findIndex(function(row) {
-    return normalizeSheetDate_(row[0], timezone) === tomorrowKey;
-  });
-  if (existingDateIndex >= 0) {
-    const existingStartRow = firstDataRow + existingDateIndex;
-    const requiredLastRow = existingStartRow + 7;
-    if (requiredLastRow > sheet.getMaxRows()) {
-      sheet.insertRowsAfter(sheet.getMaxRows(), requiredLastRow - sheet.getMaxRows());
-    }
-
-    const existingBlock = sheet.getRange(existingStartRow, 2, 8, 1);
-    const blockDates = existingBlock.getValues();
-    const lastDateKey = normalizeSheetDate_(blockDates[7][0], timezone);
-    if (lastDateKey !== tomorrowKey) {
-      existingBlock.setValues(blockDates.map(function() {
-        return [new Date(tomorrow)];
-      })).setNumberFormat('d/m/yyyy');
-      return {
-        sheet: sheet.getName(),
-        created: true,
-        rows: 8,
-        date: formatThaiDate_(tomorrow, timezone) + ' (เติมวันที่ให้ครบ)'
-      };
-    }
-
+  if (hasCompleteTomorrowBlock_(sheet, firstDataRow, tomorrowKey, timezone)) {
     return { sheet: sheet.getName(), created: false, reason: 'มีวันที่แล้ว' };
   }
 
@@ -288,18 +271,15 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
   const lastSequence = templateUsesSequence ? findMaxSequence_(sheet, firstDataRow) : 0;
   const sequenceValues = [];
   const dateValues = [];
+  const timeValues = [];
   for (let index = 0; index < rowCount; index++) {
     sequenceValues.push([templateUsesSequence ? lastSequence + index + 1 : '']);
     dateValues.push([new Date(tomorrow)]);
+    timeValues.push([ACTIVITY_TIME_SLOTS[index]]);
   }
   sheet.getRange(startRow, 1, rowCount, 1).setValues(sequenceValues);
   sheet.getRange(startRow, 2, rowCount, 1).setValues(dateValues).setNumberFormat('d/m/yyyy');
-
-  // Copy only the time/hour column values. Activity fields stay empty.
-  if (sheet.getLastColumn() >= 3 && template.hasTimeColumn) {
-    const timeValues = templateCoreValues.map(function(row) { return [row[2]]; });
-    sheet.getRange(startRow, 3, rowCount, 1).setValues(timeValues);
-  }
+  sheet.getRange(startRow, 3, rowCount, 1).setValues(timeValues);
 
   return {
     sheet: sheet.getName(),
@@ -307,6 +287,26 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
     rows: rowCount,
     date: formatThaiDate_(tomorrow, timezone)
   };
+}
+
+function hasCompleteTomorrowBlock_(sheet, firstDataRow, tomorrowKey, timezone) {
+  const rowCount = sheet.getLastRow() - firstDataRow + 1;
+  if (rowCount < ACTIVITY_TIME_SLOTS.length) return false;
+
+  const values = sheet.getRange(firstDataRow, 2, rowCount, 2).getValues();
+  for (let start = 0; start <= values.length - ACTIVITY_TIME_SLOTS.length; start++) {
+    let complete = true;
+    for (let index = 0; index < ACTIVITY_TIME_SLOTS.length; index++) {
+      const dateKey = normalizeSheetDate_(values[start + index][0], timezone);
+      const timeText = String(values[start + index][1] || '').trim();
+      if (dateKey !== tomorrowKey || timeText !== ACTIVITY_TIME_SLOTS[index]) {
+        complete = false;
+        break;
+      }
+    }
+    if (complete) return true;
+  }
+  return false;
 }
 
 function getActivitySpreadsheet_() {
