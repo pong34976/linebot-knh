@@ -194,19 +194,26 @@ function createNextActivityDate() {
   });
 
   const createdCount = results.filter(function(result) { return result.created; }).length;
-  const skippedCount = results.length - createdCount;
+  const createdNames = results.filter(function(result) {
+    return result.created;
+  }).map(function(result) { return result.sheet; });
+  const existingNames = results.filter(function(result) {
+    return !result.created && result.reason === 'มีวันที่แล้ว';
+  }).map(function(result) { return result.sheet; });
   const failedDetails = results.filter(function(result) {
     return !result.created && result.reason !== 'มีวันที่แล้ว';
-  }).map(function(result) {
-    return result.sheet + ': ' + result.reason;
-  });
+  }).map(function(result) { return result.sheet + ': ' + result.reason; });
+  const messageLines = [
+    'วันที่ ' + formatThaiDate_(tomorrow, timezone),
+    'สร้างแล้ว ' + createdCount + ' ชีต'
+  ];
+  if (createdNames.length) messageLines.push('✓ ' + createdNames.join(', '));
+  if (existingNames.length) messageLines.push('มีอยู่แล้ว: ' + existingNames.join(', '));
+  if (failedDetails.length) messageLines.push('ผิดพลาด:\n' + failedDetails.join('\n'));
   return {
     created: createdCount > 0,
     results: results,
-    message: 'สร้างวันที่ ' + formatThaiDate_(tomorrow, timezone) +
-      ' แล้ว ' + createdCount + ' ชีต' +
-      (skippedCount ? ' และข้าม ' + skippedCount + ' ชีต' : '') +
-      (failedDetails.length ? '\n' + failedDetails.join('\n') : '')
+    message: messageLines.join('\n')
   };
 }
 
@@ -247,13 +254,15 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
   const templateStartRow = Math.max(firstDataRow, template.startRow);
   const source = sheet.getRange(templateStartRow, 1, rowCount, columnCount);
   const target = sheet.getRange(startRow, 1, rowCount, columnCount);
-  source.copyTo(target, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
-  source.copyTo(target, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
+  // One copy preserves formats, dropdowns, row structure and formulas. Content is
+  // cleared immediately afterwards, reducing service calls across many sheets.
+  source.copyTo(target, SpreadsheetApp.CopyPasteType.PASTE_NORMAL, false);
   target.clearContent();
 
-  const sequenceSource = sheet.getRange(
-    template.startRow, 1, rowCount, 1
+  const templateCoreValues = sheet.getRange(
+    templateStartRow, 1, rowCount, 3
   ).getValues();
+  const sequenceSource = templateCoreValues.map(function(row) { return [row[0]]; });
   const templateUsesSequence = sequenceSource.some(function(row) {
     return typeof row[0] === 'number' && row[0] > 0;
   });
@@ -263,7 +272,7 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
   for (let index = 0; index < rowCount; index++) {
     sequenceValues.push([templateUsesSequence ? lastSequence + index + 1 : '']);
     // Preserve each sheet's convention: date on every row or first row only.
-    const templateDate = sheet.getRange(templateStartRow + index, 2).getValue();
+    const templateDate = templateCoreValues[index][1];
     dateValues.push([index === 0 || template.dateOnEveryRow || templateDate ?
       new Date(tomorrow) : '']);
   }
@@ -272,7 +281,7 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
 
   // Copy only the time/hour column values. Activity fields stay empty.
   if (sheet.getLastColumn() >= 3 && template.hasTimeColumn) {
-    const timeValues = sheet.getRange(templateStartRow, 3, rowCount, 1).getValues();
+    const timeValues = templateCoreValues.map(function(row) { return [row[2]]; });
     sheet.getRange(startRow, 3, rowCount, 1).setValues(timeValues);
   }
 
