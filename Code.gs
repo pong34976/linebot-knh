@@ -1,17 +1,6 @@
 const LINE_REPLY_URL = 'https://api.line.me/v2/bot/message/reply';
 const LINE_PUSH_URL = 'https://api.line.me/v2/bot/message/push';
-const ACTIVITY_SHEET_NAME = 'Activity พงศ์พล';
 const ACTIVITY_SHEET_PREFIX = 'Activity ';
-const ACTIVITY_TIME_SLOTS = [
-  '8:00 - 9:00',
-  '9:00 - 10:00',
-  '10:00 - 11:00',
-  '11:00 - 12:00',
-  '12:00 - 13:00',
-  '13:00 - 14:00',
-  '14:00 - 15:00',
-  '15:00 - 16:00'
-];
 
 function onOpen() {
   SpreadsheetApp.getUi()
@@ -26,7 +15,7 @@ function createNextActivityDateManual() {
   const ui = SpreadsheetApp.getUi();
   const answer = ui.alert(
     'สร้างข้อมูลวันพรุ่งนี้',
-    'ต้องการสร้างข้อมูลวันพรุ่งนี้ในชีต Activity พงศ์พลหรือไม่?',
+    'ต้องการสร้างข้อมูลวันพรุ่งนี้ในทุกชีต Activity หรือไม่?',
     ui.ButtonSet.YES_NO
   );
   if (answer !== ui.Button.YES) return;
@@ -179,79 +168,100 @@ function jsonResponse_(body) {
 }
 
 /**
- * Creates tomorrow's eight hourly rows in "Activity พงศ์พล".
+ * Creates tomorrow's blank rows in every sheet whose name starts with "Activity ".
  * Run installActivityTrigger() once to schedule this function every day.
  */
 function createNextActivityDate() {
   const spreadsheet = getActivitySpreadsheet_();
-  const sheet = spreadsheet.getSheetByName(ACTIVITY_SHEET_NAME);
-  if (!sheet) throw new Error('Sheet not found: ' + ACTIVITY_SHEET_NAME);
-
   const timezone = spreadsheet.getSpreadsheetTimeZone() || 'Asia/Bangkok';
   const tomorrow = new Date();
   tomorrow.setHours(12, 0, 0, 0);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowKey = Utilities.formatDate(tomorrow, timezone, 'yyyy-MM-dd');
+  const results = [];
 
-  const lastDataRow = findLastActivityRow_(sheet);
-  if (lastDataRow < 6) throw new Error('No activity template row was found');
-
-  const dateValues = sheet.getRange(6, 2, lastDataRow - 5, 1).getValues();
-  const alreadyExists = dateValues.some(function(row) {
-    const value = row[0];
-    return value instanceof Date &&
-      Utilities.formatDate(value, timezone, 'yyyy-MM-dd') === tomorrowKey;
+  spreadsheet.getSheets().forEach(function(sheet) {
+    if (!isActivitySheet_(sheet)) return;
+    results.push(createNextActivityDateForSheet_(sheet, tomorrow, timezone));
   });
-  if (alreadyExists) {
-    console.log('Activity rows already exist for ' + tomorrowKey);
-    return {
-      created: false,
-      message: 'มีข้อมูลวันที่ ' + formatThaiDate_(tomorrow, timezone) + ' อยู่แล้ว'
-    };
+
+  const createdCount = results.filter(function(result) { return result.created; }).length;
+  const skippedCount = results.length - createdCount;
+  return {
+    created: createdCount > 0,
+    results: results,
+    message: 'สร้างวันที่ ' + formatThaiDate_(tomorrow, timezone) +
+      ' แล้ว ' + createdCount + ' ชีต' +
+      (skippedCount ? ' และข้าม ' + skippedCount + ' ชีต' : '')
+  };
+}
+
+function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
+  const tomorrowKey = Utilities.formatDate(tomorrow, timezone, 'yyyy-MM-dd');
+  const firstDataRow = findActivityFirstDataRow_(sheet);
+  const lastDataRow = findLastActivityRow_(sheet, firstDataRow);
+  if (lastDataRow < firstDataRow) {
+    return { sheet: sheet.getName(), created: false, reason: 'ไม่มีข้อมูลต้นแบบ' };
   }
 
+  const existingDates = sheet.getRange(
+    firstDataRow, 2, lastDataRow - firstDataRow + 1, 1
+  ).getValues();
+  let currentDateKey = '';
+  const alreadyExists = existingDates.some(function(row) {
+    if (row[0] instanceof Date || String(row[0] || '').trim()) {
+      currentDateKey = normalizeSheetDate_(row[0], timezone);
+    }
+    return currentDateKey === tomorrowKey;
+  });
+  if (alreadyExists) {
+    return { sheet: sheet.getName(), created: false, reason: 'มีวันที่แล้ว' };
+  }
+
+  const template = findLatestActivityDayBlock_(sheet, firstDataRow, lastDataRow, timezone);
+  if (!template) {
+    return { sheet: sheet.getName(), created: false, reason: 'หาแบบวันล่าสุดไม่ได้' };
+  }
+
+  const rowCount = template.rowCount;
   const startRow = lastDataRow + 1;
-  const requiredLastRow = startRow + ACTIVITY_TIME_SLOTS.length - 1;
+  const requiredLastRow = startRow + rowCount - 1;
   if (requiredLastRow > sheet.getMaxRows()) {
     sheet.insertRowsAfter(sheet.getMaxRows(), requiredLastRow - sheet.getMaxRows());
   }
 
-  // Copy the most recent full-day block to preserve formatting and dropdowns.
-  const templateStartRow = Math.max(6, lastDataRow - ACTIVITY_TIME_SLOTS.length + 1);
   const columnCount = sheet.getMaxColumns();
-  sheet.getRange(templateStartRow, 1, ACTIVITY_TIME_SLOTS.length, columnCount)
-    .copyTo(sheet.getRange(startRow, 1, ACTIVITY_TIME_SLOTS.length, columnCount),
-      SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
-  sheet.getRange(templateStartRow, 1, ACTIVITY_TIME_SLOTS.length, columnCount)
-    .copyTo(sheet.getRange(startRow, 1, ACTIVITY_TIME_SLOTS.length, columnCount),
-      SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
+  const source = sheet.getRange(template.startRow, 1, rowCount, columnCount);
+  const target = sheet.getRange(startRow, 1, rowCount, columnCount);
+  source.copyTo(target, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+  source.copyTo(target, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
+  target.clearContent();
 
   const lastSequence = Number(sheet.getRange(lastDataRow, 1).getValue()) || 0;
-  const rows = ACTIVITY_TIME_SLOTS.map(function(timeSlot, index) {
-    return [
-      lastSequence + index + 1,
-      new Date(tomorrow),
-      timeSlot
-    ];
-  });
+  const sequenceValues = [];
+  const dateValues = [];
+  for (let index = 0; index < rowCount; index++) {
+    sequenceValues.push([lastSequence + index + 1]);
+    // Preserve each sheet's convention: date on every row or first row only.
+    const templateDate = sheet.getRange(template.startRow + index, 2).getValue();
+    dateValues.push([index === 0 || template.dateOnEveryRow || templateDate ?
+      new Date(tomorrow) : '']);
+  }
+  sheet.getRange(startRow, 1, rowCount, 1).setValues(sequenceValues);
+  sheet.getRange(startRow, 2, rowCount, 1).setValues(dateValues).setNumberFormat('d/m/yyyy');
 
-  sheet.getRange(startRow, 1, rows.length, columnCount).clearContent();
-  sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
-  sheet.getRange(startRow, 2, rows.length, 1).setNumberFormat('d/m/yyyy');
-  console.log('Created activity rows for ' + tomorrowKey + ' at rows ' +
-    startRow + '-' + requiredLastRow);
-  return {
-    created: true,
-    message: 'สร้างข้อมูลวันที่ ' + formatThaiDate_(tomorrow, timezone) +
-      ' เรียบร้อยแล้ว (แถว ' + startRow + '-' + requiredLastRow + ')'
-  };
+  // Copy only the time/hour column values. Activity fields stay empty.
+  if (sheet.getLastColumn() >= 3 && template.hasTimeColumn) {
+    const timeValues = sheet.getRange(template.startRow, 3, rowCount, 1).getValues();
+    sheet.getRange(startRow, 3, rowCount, 1).setValues(timeValues);
+  }
+
+  return { sheet: sheet.getName(), created: true, rows: rowCount };
 }
 
 function getActivitySpreadsheet_() {
   // Container-bound scripts should use their parent spreadsheet directly.
   const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  if (activeSpreadsheet &&
-      activeSpreadsheet.getSheetByName(ACTIVITY_SHEET_NAME)) {
+  if (activeSpreadsheet && activeSpreadsheet.getSheets().some(isActivitySheet_)) {
     return activeSpreadsheet;
   }
 
@@ -301,10 +311,9 @@ function checkDailyActivityAndNotify() {
   const completedNames = [];
 
   spreadsheet.getSheets().forEach(function(sheet) {
-    const sheetName = sheet.getName();
-    if (sheetName.indexOf(ACTIVITY_SHEET_PREFIX) !== 0) return;
+    if (!isActivitySheet_(sheet)) return;
 
-    const personName = sheetName.substring(ACTIVITY_SHEET_PREFIX.length).trim();
+    const personName = sheet.getName().substring(ACTIVITY_SHEET_PREFIX.length).trim();
     const status = getActivityStatusForDate_(sheet, todayKey, timezone);
     if (status.completed) {
       completedNames.push(personName);
@@ -313,15 +322,14 @@ function checkDailyActivityAndNotify() {
     }
   });
 
-  const displayDate = Utilities.formatDate(today, timezone, 'd/M/yyyy');
-  const lines = ['สรุปการลง Activity วันที่ ' + displayDate];
+  const lines = ['🔔 แจ้งเตือนการลง Activity', ''];
   if (missingNames.length) {
-    lines.push('', 'ยังไม่ลง Activity (' + missingNames.length + ' คน)');
-    missingNames.forEach(function(name) { lines.push('- ' + name); });
+    lines.push('ผู้ใช้งานที่ยังไม่ได้บันทึก Activity วันนี้', '');
+    missingNames.forEach(function(name) { lines.push('• ' + name); });
+    lines.push('', 'กรุณาดำเนินการบันทึกข้อมูลภายในเวลาที่กำหนด', '', 'ขอบคุณครับ');
   } else {
-    lines.push('', 'ทุกคนลง Activity แล้ว');
+    lines.push('ผู้ใช้งานทุกคนบันทึก Activity วันนี้เรียบร้อยแล้ว', '', 'ขอบคุณครับ');
   }
-  lines.push('', 'ลงแล้ว: ' + completedNames.length + ' คน');
 
   const message = lines.join('\n');
   const reportUserId = PropertiesService.getScriptProperties()
@@ -382,6 +390,49 @@ function findActivityFirstDataRow_(sheet) {
   return 2;
 }
 
+function isActivitySheet_(sheet) {
+  return sheet.getName().indexOf(ACTIVITY_SHEET_PREFIX) === 0;
+}
+
+function findLatestActivityDayBlock_(sheet, firstDataRow, lastDataRow, timezone) {
+  const dateValues = sheet.getRange(
+    firstDataRow, 2, lastDataRow - firstDataRow + 1, 1
+  ).getValues();
+  let latestDateKey = '';
+  for (let index = dateValues.length - 1; index >= 0; index--) {
+    latestDateKey = normalizeSheetDate_(dateValues[index][0], timezone);
+    if (latestDateKey) break;
+  }
+  if (!latestDateKey) return null;
+
+  let latestStartIndex = dateValues.length - 1;
+  let currentDateKey = '';
+  for (let index = 0; index < dateValues.length; index++) {
+    const explicitDateKey = normalizeSheetDate_(dateValues[index][0], timezone);
+    if (explicitDateKey) currentDateKey = explicitDateKey;
+    if (currentDateKey === latestDateKey) {
+      latestStartIndex = index;
+      break;
+    }
+  }
+
+  const endIndex = dateValues.length;
+  const rowCount = endIndex - latestStartIndex;
+  const dateOnEveryRow = dateValues.slice(latestStartIndex)
+    .every(function(row) { return Boolean(normalizeSheetDate_(row[0], timezone)); });
+  const headerValues = sheet.getRange(1, 1, Math.min(10, sheet.getLastRow()), 3)
+    .getDisplayValues();
+  const hasTimeColumn = headerValues.some(function(row) {
+    return row[2] === 'เวลา' || row[2] === 'ชั่วโมงที่';
+  });
+  return {
+    startRow: firstDataRow + latestStartIndex,
+    rowCount: rowCount,
+    dateOnEveryRow: dateOnEveryRow,
+    hasTimeColumn: hasTimeColumn
+  };
+}
+
 function normalizeSheetDate_(value, timezone) {
   if (value instanceof Date) {
     return Utilities.formatDate(value, timezone, 'yyyy-MM-dd');
@@ -392,8 +443,8 @@ function normalizeSheetDate_(value, timezone) {
     ('0' + match[1]).slice(-2);
 }
 
-function findLastActivityRow_(sheet) {
-  const firstDataRow = 6;
+function findLastActivityRow_(sheet, firstDataRow) {
+  firstDataRow = firstDataRow || findActivityFirstDataRow_(sheet);
   const rowCount = Math.max(0, sheet.getLastRow() - firstDataRow + 1);
   if (!rowCount) return firstDataRow - 1;
 
