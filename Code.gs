@@ -345,11 +345,10 @@ function checkDailyActivityAndNotify() {
 
   const lines = ['🔔 แจ้งเตือนการลง Activity', ''];
   if (missingNames.length) {
-    lines.push('ผู้ใช้งานที่ยังไม่ได้บันทึก Activity วันนี้', '');
+    lines.push('ผู้ใช้งานที่ยังไม่ได้บันทึก Activity วันนี้');
     missingNames.forEach(function(name) { lines.push('• ' + name); });
-    lines.push('', 'กรุณาดำเนินการบันทึกข้อมูลภายในเวลาที่กำหนด', '', 'ขอบคุณครับ');
   } else {
-    lines.push('ผู้ใช้งานทุกคนบันทึก Activity วันนี้เรียบร้อยแล้ว', '', 'ขอบคุณครับ');
+    lines.push('ผู้ใช้งานทุกคนบันทึก Activity วันนี้เรียบร้อยแล้ว');
   }
 
   const message = lines.join('\n');
