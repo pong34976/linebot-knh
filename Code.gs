@@ -232,14 +232,31 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
   const existingDates = sheet.getRange(
     firstDataRow, 2, Math.max(1, sheet.getLastRow() - firstDataRow + 1), 1
   ).getValues();
-  let currentDateKey = '';
-  const alreadyExists = existingDates.some(function(row) {
-    if (row[0] instanceof Date || String(row[0] || '').trim()) {
-      currentDateKey = normalizeSheetDate_(row[0], timezone);
-    }
-    return currentDateKey === tomorrowKey;
+  const existingDateIndex = existingDates.findIndex(function(row) {
+    return normalizeSheetDate_(row[0], timezone) === tomorrowKey;
   });
-  if (alreadyExists) {
+  if (existingDateIndex >= 0) {
+    const existingStartRow = firstDataRow + existingDateIndex;
+    const requiredLastRow = existingStartRow + 7;
+    if (requiredLastRow > sheet.getMaxRows()) {
+      sheet.insertRowsAfter(sheet.getMaxRows(), requiredLastRow - sheet.getMaxRows());
+    }
+
+    const existingBlock = sheet.getRange(existingStartRow, 2, 8, 1);
+    const blockDates = existingBlock.getValues();
+    const lastDateKey = normalizeSheetDate_(blockDates[7][0], timezone);
+    if (lastDateKey !== tomorrowKey) {
+      existingBlock.setValues(blockDates.map(function() {
+        return [new Date(tomorrow)];
+      })).setNumberFormat('d/m/yyyy');
+      return {
+        sheet: sheet.getName(),
+        created: true,
+        rows: 8,
+        date: formatThaiDate_(tomorrow, timezone) + ' (เติมวันที่ให้ครบ)'
+      };
+    }
+
     return { sheet: sheet.getName(), created: false, reason: 'มีวันที่แล้ว' };
   }
 
@@ -273,10 +290,7 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
   const dateValues = [];
   for (let index = 0; index < rowCount; index++) {
     sequenceValues.push([templateUsesSequence ? lastSequence + index + 1 : '']);
-    // Preserve each sheet's convention: date on every row or first row only.
-    const templateDate = templateCoreValues[index][1];
-    dateValues.push([index === 0 || template.dateOnEveryRow || templateDate ?
-      new Date(tomorrow) : '']);
+    dateValues.push([new Date(tomorrow)]);
   }
   sheet.getRange(startRow, 1, rowCount, 1).setValues(sequenceValues);
   sheet.getRange(startRow, 2, rowCount, 1).setValues(dateValues).setNumberFormat('d/m/yyyy');
