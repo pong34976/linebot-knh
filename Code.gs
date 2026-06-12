@@ -181,17 +181,32 @@ function createNextActivityDate() {
 
   spreadsheet.getSheets().forEach(function(sheet) {
     if (!isActivitySheet_(sheet)) return;
-    results.push(createNextActivityDateForSheet_(sheet, tomorrow, timezone));
+    try {
+      results.push(createNextActivityDateForSheet_(sheet, tomorrow, timezone));
+    } catch (error) {
+      console.error(sheet.getName() + ': ' + (error.stack || error));
+      results.push({
+        sheet: sheet.getName(),
+        created: false,
+        reason: error.message || String(error)
+      });
+    }
   });
 
   const createdCount = results.filter(function(result) { return result.created; }).length;
   const skippedCount = results.length - createdCount;
+  const failedDetails = results.filter(function(result) {
+    return !result.created && result.reason !== 'มีวันที่แล้ว';
+  }).map(function(result) {
+    return result.sheet + ': ' + result.reason;
+  });
   return {
     created: createdCount > 0,
     results: results,
     message: 'สร้างวันที่ ' + formatThaiDate_(tomorrow, timezone) +
       ' แล้ว ' + createdCount + ' ชีต' +
-      (skippedCount ? ' และข้าม ' + skippedCount + ' ชีต' : '')
+      (skippedCount ? ' และข้าม ' + skippedCount + ' ชีต' : '') +
+      (failedDetails.length ? '\n' + failedDetails.join('\n') : '')
   };
 }
 
@@ -220,7 +235,8 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
     return { sheet: sheet.getName(), created: false, reason: 'มีวันที่แล้ว' };
   }
 
-  const rowCount = template.rowCount;
+  // All Activity sheets use eight working-hour rows per day.
+  const rowCount = 8;
   const startRow = lastDataRow + 1;
   const requiredLastRow = startRow + rowCount - 1;
   if (requiredLastRow > sheet.getMaxRows()) {
@@ -228,7 +244,8 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
   }
 
   const columnCount = sheet.getMaxColumns();
-  const source = sheet.getRange(template.startRow, 1, rowCount, columnCount);
+  const templateStartRow = Math.max(firstDataRow, template.startRow);
+  const source = sheet.getRange(templateStartRow, 1, rowCount, columnCount);
   const target = sheet.getRange(startRow, 1, rowCount, columnCount);
   source.copyTo(target, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
   source.copyTo(target, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
@@ -246,7 +263,7 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
   for (let index = 0; index < rowCount; index++) {
     sequenceValues.push([templateUsesSequence ? lastSequence + index + 1 : '']);
     // Preserve each sheet's convention: date on every row or first row only.
-    const templateDate = sheet.getRange(template.startRow + index, 2).getValue();
+    const templateDate = sheet.getRange(templateStartRow + index, 2).getValue();
     dateValues.push([index === 0 || template.dateOnEveryRow || templateDate ?
       new Date(tomorrow) : '']);
   }
@@ -255,7 +272,7 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
 
   // Copy only the time/hour column values. Activity fields stay empty.
   if (sheet.getLastColumn() >= 3 && template.hasTimeColumn) {
-    const timeValues = sheet.getRange(template.startRow, 3, rowCount, 1).getValues();
+    const timeValues = sheet.getRange(templateStartRow, 3, rowCount, 1).getValues();
     sheet.getRange(startRow, 3, rowCount, 1).setValues(timeValues);
   }
 
@@ -413,15 +430,21 @@ function findLatestActivityDayBlock_(sheet, firstDataRow, lastDataRow, timezone)
   }
   if (!dateBlocks.length) return null;
 
+  // Use the last physically recorded date as the template anchor. A fixed 8-row
+  // block avoids malformed dates inside a day changing the generated row count.
   const latestBlock = dateBlocks[dateBlocks.length - 1];
-  let rowCount = 0;
-  if (dateBlocks.length > 1) {
-    rowCount = latestBlock.startIndex - dateBlocks[dateBlocks.length - 2].startIndex;
+  let latestStartIndex = latestBlock.startIndex;
+  const timeValues = sheet.getRange(
+    firstDataRow, 3, dateValues.length, 1
+  ).getDisplayValues();
+  for (let index = latestStartIndex; index >= Math.max(0, latestStartIndex - 7); index--) {
+    const timeText = String(timeValues[index][0] || '').trim();
+    if (/^(8(?::00)?\s*-\s*9(?::00)?|8)$/.test(timeText)) {
+      latestStartIndex = index;
+      break;
+    }
   }
-  // Activity sheets normally have 8 rows/day. Reject implausible gaps caused by old data.
-  if (rowCount < 1 || rowCount > 24) rowCount = 8;
-
-  const latestStartIndex = latestBlock.startIndex;
+  const rowCount = 8;
   const dateOnEveryRow = dateValues.slice(latestStartIndex, latestStartIndex + rowCount)
     .every(function(row) { return Boolean(normalizeSheetDate_(row[0], timezone)); });
   const headerValues = sheet.getRange(1, 1, Math.min(10, sheet.getLastRow()), 3)
