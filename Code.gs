@@ -399,7 +399,9 @@ function checkDailyActivityAndNotify(forceSend) {
       name: personName,
       completed: status.completed,
       hasDate: status.hasDate,
-      hasActivity: status.hasActivity
+      hasActivity: status.hasActivity,
+      periodCount: status.periodCount,
+      nonEmptyPeriods: status.nonEmptyPeriods
     });
     if (status.completed) {
       completedNames.push(personName);
@@ -435,10 +437,10 @@ function checkDailyActivityAndNotify(forceSend) {
       ') ผู้ใช้งานที่บันทึก Activity วันนี้'
   ];
   activityStatuses.forEach(function(status) {
-    const suffix = !status.completed && status.hasDate && status.hasActivity ?
-      ' (ไม่ครบ)' : '';
+    const suffix = incompleteNames.indexOf(status.name) >= 0 ? ' (ไม่ครบ)' : '';
     lines.push('• ' + status.name + suffix);
   });
+  console.log('Activity status detail: ' + JSON.stringify(activityStatuses));
 
   const message = lines.join('\n');
   const delivery = recordAndMaybeSendActivityMessage_(spreadsheet, message, timezone);
@@ -447,6 +449,7 @@ function checkDailyActivityAndNotify(forceSend) {
     missing: missingNames,
     incomplete: incompleteNames,
     completed: completedNames,
+    statuses: activityStatuses,
     sent: delivery.sent,
     logId: delivery.logId,
     message: message
@@ -555,12 +558,14 @@ function getActivityStatusForDate_(sheet, targetDateKey, timezone) {
 
   const hasEightPeriods = workValues.length >= 8;
   const emptyPeriods = workValues.filter(function(value) { return value === ''; }).length;
-  const hasActivity = workValues.some(function(value) { return value !== ''; });
+  const nonEmptyPeriods = workValues.filter(function(value) { return value !== ''; }).length;
+  const hasActivity = nonEmptyPeriods > 0;
   return {
     completed: hasEightPeriods && emptyPeriods === 0,
     hasDate: workValues.length > 0,
     hasActivity: hasActivity,
     periodCount: workValues.length,
+    nonEmptyPeriods: nonEmptyPeriods,
     emptyPeriods: emptyPeriods
   };
 }
