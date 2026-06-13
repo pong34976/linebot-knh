@@ -18,7 +18,7 @@ function onOpen() {
     .createMenu('Activity Tools')
     .addItem('สร้างข้อมูลวันพรุ่งนี้', 'createNextActivityDateManual')
     .addItem('ตรวจ Activity วันนี้และส่ง LINE', 'checkDailyActivityAndNotifyManual')
-    .addItem('ติดตั้งทริกเกอร์ 18:00 / 20:00', 'installActivityTriggerManual')
+
     .addToUi();
 }
 
@@ -385,6 +385,7 @@ function checkDailyActivityAndNotify(forceSend) {
     };
   }
   const missingNames = [];
+  const incompleteNames = [];
   const completedNames = [];
 
   spreadsheet.getSheets().forEach(function(sheet) {
@@ -394,6 +395,9 @@ function checkDailyActivityAndNotify(forceSend) {
     const status = getActivityStatusForDate_(sheet, todayKey, timezone);
     if (status.completed) {
       completedNames.push(personName);
+    } else if (status.hasDate) {
+      incompleteNames.push(personName);
+      missingNames.push(personName);
     } else {
       missingNames.push(personName);
     }
@@ -419,10 +423,12 @@ function checkDailyActivityAndNotify(forceSend) {
 
   const lines = [
     '🔔 แจ้งเตือนการลง Activity',
-    '',
-    'ผู้ใช้งานที่บันทึก Activity วันนี้ไม่ครบ'
+    'ผู้ใช้งานที่ยังไม่ได้บันทึก Activity วันนี้'
   ];
-  missingNames.forEach(function(name) { lines.push('• ' + name); });
+  missingNames.forEach(function(name) {
+    const suffix = incompleteNames.indexOf(name) >= 0 ? ' (ไม่ครบ)' : '';
+    lines.push('• ' + name + suffix);
+  });
 
   const message = lines.join('\n');
   const reportUserId = PropertiesService.getScriptProperties()
@@ -434,6 +440,7 @@ function checkDailyActivityAndNotify(forceSend) {
   console.log(message);
   return {
     missing: missingNames,
+    incomplete: incompleteNames,
     completed: completedNames,
     sent: true,
     message: message
