@@ -203,7 +203,8 @@ function createNextActivityDate() {
   }
   const results = [];
 
-  spreadsheet.getSheets().forEach(function(sheet) {
+  const activitySheets = spreadsheet.getSheets() || [];
+  activitySheets.forEach(function(sheet) {
     if (!isActivitySheet_(sheet)) return;
     try {
       results.push(createNextActivityDateForSheet_(sheet, tomorrow, timezone));
@@ -231,7 +232,7 @@ function createNextActivityDate() {
     'สร้างแล้ว ' + createdCount + ' ชีต'
   ];
   if (createdNames.length) {
-    results.filter(function(result) { return result.created; }).forEach(function(result) {
+    (results || []).filter(function(result) { return result.created; }).forEach(function(result) {
       messageLines.push('✓ ' + result.sheet + ' → ' + result.date);
     });
   }
@@ -341,7 +342,8 @@ function getActivitySpreadsheet_() {
 
 /** Run once to install both daily automation triggers. */
 function installActivityTrigger() {
-  ScriptApp.getProjectTriggers().forEach(function(trigger) {
+  const projectTriggers = ScriptApp.getProjectTriggers() || [];
+  projectTriggers.forEach(function(trigger) {
     const handler = trigger.getHandlerFunction();
     if (handler === 'createNextActivityDate' ||
         handler === 'checkDailyActivityAndNotify') {
@@ -390,7 +392,8 @@ function checkDailyActivityAndNotify(forceSend) {
   const completedNames = [];
   const activityStatuses = [];
 
-  spreadsheet.getSheets().forEach(function(sheet) {
+  const activitySheets = spreadsheet.getSheets() || [];
+  activitySheets.forEach(function(sheet) {
     if (!isActivitySheet_(sheet)) return;
 
     const personName = sheet.getName().substring(ACTIVITY_SHEET_PREFIX.length).trim();
@@ -436,7 +439,7 @@ function checkDailyActivityAndNotify(forceSend) {
     }).length +
       ') ผู้ใช้งานที่บันทึก Activity วันนี้'
   ];
-  activityStatuses.forEach(function(status) {
+  (activityStatuses || []).forEach(function(status) {
     const suffix = incompleteNames.indexOf(status.name) >= 0 ? ' (ไม่ครบ)' : '';
     lines.push('• ' + status.name + suffix);
   });
