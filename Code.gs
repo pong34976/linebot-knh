@@ -1,6 +1,7 @@
 const LINE_REPLY_URL = 'https://api.line.me/v2/bot/message/reply';
 const LINE_PUSH_URL = 'https://api.line.me/v2/bot/message/push';
 const ACTIVITY_SHEET_PREFIX = 'Activity ';
+const HOLIDAY_SHEET_NAME = 'วันหยุด';
 const ACTIVITY_TIME_SLOTS = [
   '8:00 - 9:00',
   '9:00 - 10:00',
@@ -359,6 +360,18 @@ function checkDailyActivityAndNotify() {
   const timezone = spreadsheet.getSpreadsheetTimeZone() || 'Asia/Bangkok';
   const today = new Date();
   const todayKey = Utilities.formatDate(today, timezone, 'yyyy-MM-dd');
+  const nonWorkingDay = getNonWorkingDayReason_(spreadsheet, today, timezone);
+  if (nonWorkingDay) {
+    const skipMessage = 'งดส่ง LINE: ' + nonWorkingDay;
+    console.log(skipMessage);
+    return {
+      missing: [],
+      completed: [],
+      sent: false,
+      skipped: true,
+      message: skipMessage
+    };
+  }
   const missingNames = [];
   const completedNames = [];
 
@@ -413,6 +426,37 @@ function checkDailyActivityAndNotify() {
     sent: true,
     message: message
   };
+}
+
+function getNonWorkingDayReason_(spreadsheet, date, timezone) {
+  const localDateKey = Utilities.formatDate(date, timezone, 'yyyy-MM-dd');
+  const dateParts = localDateKey.split('-').map(Number);
+  const dayOfWeek = new Date(
+    dateParts[0], dateParts[1] - 1, dateParts[2], 12, 0, 0, 0
+  ).getDay();
+  if (dayOfWeek === 6) return 'วันเสาร์';
+  if (dayOfWeek === 0) return 'วันอาทิตย์';
+
+  const holidaySheet = spreadsheet.getSheetByName(HOLIDAY_SHEET_NAME);
+  if (!holidaySheet || holidaySheet.getLastRow() < 1 || holidaySheet.getLastColumn() < 1) {
+    return '';
+  }
+
+  const targetDateKey = Utilities.formatDate(date, timezone, 'yyyy-MM-dd');
+  const values = holidaySheet.getDataRange().getValues();
+  for (let row = 0; row < values.length; row++) {
+    for (let column = 0; column < values[row].length; column++) {
+      if (normalizeSheetDate_(values[row][column], timezone) === targetDateKey) {
+        const description = values[row].filter(function(value) {
+          return normalizeSheetDate_(value, timezone) !== targetDateKey;
+        }).map(function(value) {
+          return String(value || '').trim();
+        }).filter(Boolean).join(' ');
+        return description ? 'วันหยุด: ' + description : 'วันที่ระบุในชีตวันหยุด';
+      }
+    }
+  }
+  return '';
 }
 
 function getActivityStatusForDate_(sheet, targetDateKey, timezone) {
