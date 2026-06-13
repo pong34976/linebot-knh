@@ -387,12 +387,18 @@ function checkDailyActivityAndNotify(forceSend) {
   const missingNames = [];
   const incompleteNames = [];
   const completedNames = [];
+  const activityStatuses = [];
 
   spreadsheet.getSheets().forEach(function(sheet) {
     if (!isActivitySheet_(sheet)) return;
 
     const personName = sheet.getName().substring(ACTIVITY_SHEET_PREFIX.length).trim();
     const status = getActivityStatusForDate_(sheet, todayKey, timezone);
+    activityStatuses.push({
+      name: personName,
+      completed: status.completed,
+      hasDate: status.hasDate
+    });
     if (status.completed) {
       completedNames.push(personName);
     } else if (status.hasDate) {
@@ -423,11 +429,14 @@ function checkDailyActivityAndNotify(forceSend) {
 
   const lines = [
     '🔔 แจ้งเตือนการลง Activity',
-    'ผู้ใช้งานที่ยังไม่ได้บันทึก Activity วันนี้'
+    '⭐ (' + activityStatuses.length + '/' + activityStatuses.filter(function(status) {
+      return status.hasDate;
+    }).length +
+      ') ผู้ใช้งานที่บันทึก Activity วันนี้'
   ];
-  missingNames.forEach(function(name) {
-    const suffix = incompleteNames.indexOf(name) >= 0 ? ' (ไม่ครบ)' : '';
-    lines.push('• ' + name + suffix);
+  activityStatuses.forEach(function(status) {
+    const suffix = !status.completed && status.hasDate ? ' (ไม่ครบ)' : '';
+    lines.push('• ' + status.name + suffix);
   });
 
   const message = lines.join('\n');
