@@ -54,11 +54,23 @@ function installActivityTriggerManual() {
 }
 
 function checkDailyActivityAndNotifyManual() {
+  const ui = SpreadsheetApp.getUi();
+  const confirmation = ui.prompt(
+    'ยืนยันการส่ง LINE',
+    'กรอกรหัสยืนยันเพื่อส่งรายงาน',
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (confirmation.getSelectedButton() !== ui.Button.OK) return;
+  if (confirmation.getResponseText().trim().toLowerCase() !== 'ok') {
+    ui.alert('รหัสยืนยันไม่ถูกต้อง จึงไม่ได้ส่ง LINE');
+    return;
+  }
+
   try {
     const result = checkDailyActivityAndNotify(true);
-    SpreadsheetApp.getUi().alert(result.message);
+    ui.alert(result.message);
   } catch (error) {
-    SpreadsheetApp.getUi().alert('ตรวจ Activity ไม่สำเร็จ: ' + error.message);
+    ui.alert('ตรวจ Activity ไม่สำเร็จ: ' + error.message);
     throw error;
   }
 }
