@@ -430,7 +430,7 @@ function checkDailyActivityAndNotify(forceSend) {
   const lines = [
     '🔔 แจ้งเตือนการลง Activity',
     '⭐ (' + activityStatuses.length + '/' + activityStatuses.filter(function(status) {
-      return status.hasDate;
+      return !status.completed;
     }).length +
       ') ผู้ใช้งานที่บันทึก Activity วันนี้'
   ];
