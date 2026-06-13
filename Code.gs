@@ -295,7 +295,9 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
   }
   sheet.getRange(startRow, 1, rowCount, 1).setValues(sequenceValues);
   sheet.getRange(startRow, 2, rowCount, 1).setValues(dateValues).setNumberFormat('d/m/yyyy');
-  sheet.getRange(startRow, 3, rowCount, 1).setValues(timeValues);
+  if (template.hasTimeColumn) {
+    sheet.getRange(startRow, 3, rowCount, 1).setValues(timeValues);
+  }
 
   return {
     sheet: sheet.getName(),
@@ -530,6 +532,7 @@ function getActivityStatusForDate_(sheet, targetDateKey, timezone) {
   const lastRow = sheet.getLastRow();
   const lastColumn = sheet.getLastColumn();
   const workColumn = findHeaderColumn_(sheet, 'งานที่ 1');
+  const timeColumn = findTimeColumn_(sheet);
   if (firstDataRow > lastRow || !workColumn) {
     return { completed: false, hasDate: false, reason: 'ไม่พบคอลัมน์งานที่ 1' };
   }
@@ -540,22 +543,23 @@ function getActivityStatusForDate_(sheet, targetDateKey, timezone) {
   const values = dataRange.getValues();
   const displayValues = dataRange.getDisplayValues();
   const workValues = [];
-  let blockStartIndex = -1;
-  for (let index = 0; index < values.length; index++) {
-    if (normalizeSheetDate_(values[index][1], timezone) === targetDateKey) {
-      blockStartIndex = index;
-      break;
-    }
-  }
+  const blockStartIndex = findDailyBlockStartIndex_(
+    values, displayValues, targetDateKey, timezone, timeColumn
+  );
 
   if (blockStartIndex >= 0) {
     for (let index = 0; index < 8 && blockStartIndex + index < values.length; index++) {
       const row = values[blockStartIndex + index];
       const explicitDateKey = normalizeSheetDate_(row[1], timezone);
-      if (index > 0 && explicitDateKey && explicitDateKey !== targetDateKey) break;
-      workValues.push(String(
+      if (index > 0 && explicitDateKey && explicitDateKey !== targetDateKey) {
+        workValues.length = 0;
+        break;
+      }
+      let workValue = String(
         displayValues[blockStartIndex + index][workColumn - 1] || ''
-      ).replace(/\s+/g, ' ').trim());
+      ).replace(/\s+/g, ' ').trim();
+      if (!timeColumn && workValue === ACTIVITY_TIME_SLOTS[index]) workValue = '';
+      workValues.push(workValue);
     }
   }
 
@@ -571,6 +575,38 @@ function getActivityStatusForDate_(sheet, targetDateKey, timezone) {
     nonEmptyPeriods: nonEmptyPeriods,
     emptyPeriods: emptyPeriods
   };
+}
+
+function findDailyBlockStartIndex_(values, displayValues, targetDateKey, timezone, timeColumn) {
+  if (timeColumn) {
+    for (let index = values.length - 1; index >= 0; index--) {
+      const dateKey = normalizeSheetDate_(values[index][1], timezone);
+      const timeText = String(displayValues[index][timeColumn - 1] || '').trim();
+      if (dateKey === targetDateKey && /^(8(?::00)?\s*-\s*9(?::00)?|8)$/.test(timeText)) {
+        return index;
+      }
+    }
+  }
+
+  // Sheets without a time column: use the first row of the last contiguous
+  // run containing the target date.
+  let lastMatch = -1;
+  for (let index = values.length - 1; index >= 0; index--) {
+    if (normalizeSheetDate_(values[index][1], timezone) === targetDateKey) {
+      lastMatch = index;
+      break;
+    }
+  }
+  if (lastMatch < 0) return -1;
+  while (lastMatch > 0 &&
+      normalizeSheetDate_(values[lastMatch - 1][1], timezone) === targetDateKey) {
+    lastMatch--;
+  }
+  return lastMatch;
+}
+
+function findTimeColumn_(sheet) {
+  return findHeaderColumn_(sheet, 'เวลา') || findHeaderColumn_(sheet, 'ชั่วโมงที่');
 }
 
 function findHeaderColumn_(sheet, headerText) {
