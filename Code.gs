@@ -378,7 +378,8 @@ function checkDailyActivityAndNotify(forceSend) {
   const today = new Date();
   const todayKey = Utilities.formatDate(today, timezone, 'yyyy-MM-dd');
   const nonWorkingDay = getNonWorkingDayReason_(spreadsheet, today, timezone);
-  if (!forceSend && nonWorkingDay) {
+  const isManualForce = forceSend === true;
+  if (!isManualForce && nonWorkingDay) {
     const skipMessage = 'งดส่ง LINE: ' + nonWorkingDay;
     console.log(skipMessage);
     return {
@@ -436,9 +437,7 @@ function checkDailyActivityAndNotify(forceSend) {
 
   const lines = [
     '🔔 แจ้งเตือนการลง Activity',
-    '⭐ (' + activityStatuses.length + '/' + activityStatuses.filter(function(status) {
-      return !status.completed;
-    }).length +
+    '⭐ (' + completedNames.length + '/' + activityStatuses.length +
       ') ผู้ใช้งานที่บันทึก Activity วันนี้'
   ];
   (missingNames || []).forEach(function(name) {
