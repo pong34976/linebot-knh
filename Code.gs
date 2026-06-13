@@ -526,9 +526,11 @@ function getActivityStatusForDate_(sheet, targetDateKey, timezone) {
     return { completed: false, hasDate: false, reason: 'ไม่พบคอลัมน์งานที่ 1' };
   }
 
-  const values = sheet.getRange(
+  const dataRange = sheet.getRange(
     firstDataRow, 1, lastRow - firstDataRow + 1, lastColumn
-  ).getValues();
+  );
+  const values = dataRange.getValues();
+  const displayValues = dataRange.getDisplayValues();
   const workValues = [];
   let blockStartIndex = -1;
   for (let index = 0; index < values.length; index++) {
@@ -543,7 +545,9 @@ function getActivityStatusForDate_(sheet, targetDateKey, timezone) {
       const row = values[blockStartIndex + index];
       const explicitDateKey = normalizeSheetDate_(row[1], timezone);
       if (index > 0 && explicitDateKey && explicitDateKey !== targetDateKey) break;
-      workValues.push(String(row[workColumn - 1] || '').trim());
+      workValues.push(String(
+        displayValues[blockStartIndex + index][workColumn - 1] || ''
+      ).replace(/\s+/g, ' ').trim());
     }
   }
 
