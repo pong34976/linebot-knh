@@ -298,6 +298,7 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
   if (template.hasTimeColumn) {
     sheet.getRange(startRow, 3, rowCount, 1).setValues(timeValues);
   }
+  setLunchBreak_(sheet, startRow);
 
   return {
     sheet: sheet.getName(),
@@ -305,6 +306,26 @@ function createNextActivityDateForSheet_(sheet, tomorrow, timezone) {
     rows: rowCount,
     date: formatThaiDate_(tomorrow, timezone)
   };
+}
+
+function setLunchBreak_(sheet, startRow) {
+  const workColumn = findHeaderColumn_(sheet, 'งานที่ 1');
+  const detailColumn = findHeaderColumnAfter_(sheet, 'รายละเอียด', workColumn);
+  if (workColumn) sheet.getRange(startRow + 4, workColumn).setValue('พักกลางวัน');
+  if (detailColumn) sheet.getRange(startRow + 4, detailColumn).setValue('พักกลางวัน');
+}
+
+function findHeaderColumnAfter_(sheet, headerText, afterColumn) {
+  const scanRows = Math.min(10, sheet.getLastRow());
+  const scanColumns = sheet.getLastColumn();
+  if (!scanRows || !scanColumns) return 0;
+  const headers = sheet.getRange(1, 1, scanRows, scanColumns).getDisplayValues();
+  for (let row = 0; row < headers.length; row++) {
+    for (let column = Math.max(0, afterColumn); column < headers[row].length; column++) {
+      if (String(headers[row][column] || '').trim() === headerText) return column + 1;
+    }
+  }
+  return 0;
 }
 
 function hasCompleteTomorrowBlock_(sheet, firstDataRow, tomorrowKey, timezone) {
