@@ -107,6 +107,11 @@ user ID ที่กำหนดไว้ใน Script Properties
 | `LINE_CHANNEL_ACCESS_TOKEN` | Channel access token |
 | `ACTIVITY_SPREADSHEET_ID` | รหัส Google Sheets จาก URL |
 | `ACTIVITY_REPORT_LINE_USER_ID` | LINE user ID ผู้รับรายงาน |
+| `msgline` | `1` ส่ง LINE, `0` ไม่ส่ง LINE |
+
+ไม่ว่าค่า `msgline` จะเป็น `1` หรือ `0` ระบบจะบันทึกรายงานทุกครั้งลงชีต `log`
+ในรูปแบบ ID, วันที่เวลา และข้อความเดียวกับรายงาน LINE หากยังไม่มีชีต `log` ระบบจะ
+สร้างชีตและหัวตารางให้อัตโนมัติ
 
 เมื่อเปิด Google Sheets ใหม่ จะมีเมนู **Activity Tools** ด้านบน สามารถเลือก
 **สร้างข้อมูลวันพรุ่งนี้** เพื่อสร้างแบบแมนนวล หรือเลือก **ติดตั้งทริกเกอร์ 18:00 / 20:00**

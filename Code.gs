@@ -2,6 +2,7 @@ const LINE_REPLY_URL = 'https://api.line.me/v2/bot/message/reply';
 const LINE_PUSH_URL = 'https://api.line.me/v2/bot/message/push';
 const ACTIVITY_SHEET_PREFIX = 'Activity ';
 const HOLIDAY_SHEET_NAME = 'วันหยุด';
+const LOG_SHEET_NAME = 'log';
 const ACTIVITY_TIME_SLOTS = [
   '8:00 - 9:00',
   '9:00 - 10:00',
@@ -412,17 +413,15 @@ function checkDailyActivityAndNotify(forceSend) {
   if (!missingNames.length) {
     const completeMessage = '✅ ทีม IT บันทึก Activity ครบเรียบร้อยแล้ว\nวันที่ ' +
       Utilities.formatDate(today, timezone, 'd/M/yyyy');
-    const reportUserId = PropertiesService.getScriptProperties()
-      .getProperty('ACTIVITY_REPORT_LINE_USER_ID');
-    if (!reportUserId) {
-      throw new Error('ACTIVITY_REPORT_LINE_USER_ID is not configured');
-    }
-    pushText_(reportUserId, completeMessage);
+    const delivery = recordAndMaybeSendActivityMessage_(
+      spreadsheet, completeMessage, timezone
+    );
     console.log(completeMessage);
     return {
       missing: [],
       completed: completedNames,
-      sent: true,
+      sent: delivery.sent,
+      logId: delivery.logId,
       message: completeMessage
     };
   }
@@ -440,20 +439,51 @@ function checkDailyActivityAndNotify(forceSend) {
   });
 
   const message = lines.join('\n');
-  const reportUserId = PropertiesService.getScriptProperties()
-    .getProperty('ACTIVITY_REPORT_LINE_USER_ID');
-  if (!reportUserId) {
-    throw new Error('ACTIVITY_REPORT_LINE_USER_ID is not configured');
-  }
-  pushText_(reportUserId, message);
+  const delivery = recordAndMaybeSendActivityMessage_(spreadsheet, message, timezone);
   console.log(message);
   return {
     missing: missingNames,
     incomplete: incompleteNames,
     completed: completedNames,
-    sent: true,
+    sent: delivery.sent,
+    logId: delivery.logId,
     message: message
   };
+}
+
+function recordAndMaybeSendActivityMessage_(spreadsheet, message, timezone) {
+  const logId = appendActivityLog_(spreadsheet, message, timezone);
+  const properties = PropertiesService.getScriptProperties();
+  const shouldSend = properties.getProperty('msgline') === '1';
+  if (!shouldSend) {
+    console.log('msgline is not 1; LINE message skipped. Log ID: ' + logId);
+    return { sent: false, logId: logId };
+  }
+
+  const reportUserId = properties.getProperty('ACTIVITY_REPORT_LINE_USER_ID');
+  if (!reportUserId) {
+    throw new Error('ACTIVITY_REPORT_LINE_USER_ID is not configured');
+  }
+  pushText_(reportUserId, message);
+  return { sent: true, logId: logId };
+}
+
+function appendActivityLog_(spreadsheet, message, timezone) {
+  let logSheet = spreadsheet.getSheetByName(LOG_SHEET_NAME);
+  if (!logSheet) logSheet = spreadsheet.insertSheet(LOG_SHEET_NAME);
+
+  if (logSheet.getLastRow() === 0) {
+    logSheet.getRange(1, 1, 1, 3).setValues([['ID', 'วันที่เวลา', 'ข้อความ']]);
+    logSheet.getRange(1, 1, 1, 3).setFontWeight('bold');
+  }
+
+  const lastRow = logSheet.getLastRow();
+  const previousId = lastRow >= 2 ? Number(logSheet.getRange(lastRow, 1).getValue()) : 0;
+  const logId = Number.isFinite(previousId) ? previousId + 1 : lastRow;
+  const timestamp = Utilities.formatDate(new Date(), timezone, 'd/M/yyyy HH:mm:ss');
+  logSheet.appendRow([logId, timestamp, message]);
+  logSheet.getRange(logSheet.getLastRow(), 3).setWrap(true);
+  return logId;
 }
 
 function getNonWorkingDayReason_(spreadsheet, date, timezone) {
