@@ -398,11 +398,11 @@ function checkDailyActivityAndNotify(forceSend) {
     activityStatuses.push({
       name: personName,
       completed: status.completed,
-      hasDate: status.hasDate
+      hasActivity: status.hasActivity
     });
     if (status.completed) {
       completedNames.push(personName);
-    } else if (status.hasDate) {
+    } else if (status.hasActivity) {
       incompleteNames.push(personName);
       missingNames.push(personName);
     } else {
@@ -434,7 +434,7 @@ function checkDailyActivityAndNotify(forceSend) {
       ') ผู้ใช้งานที่บันทึก Activity วันนี้'
   ];
   activityStatuses.forEach(function(status) {
-    const suffix = !status.completed && status.hasDate ? ' (ไม่ครบ)' : '';
+    const suffix = !status.completed && status.hasActivity ? ' (ไม่ครบ)' : '';
     lines.push('• ' + status.name + suffix);
   });
 
@@ -544,9 +544,11 @@ function getActivityStatusForDate_(sheet, targetDateKey, timezone) {
 
   const hasEightPeriods = workValues.length >= 8;
   const emptyPeriods = workValues.filter(function(value) { return value === ''; }).length;
+  const hasActivity = workValues.some(function(value) { return value !== ''; });
   return {
     completed: hasEightPeriods && emptyPeriods === 0,
     hasDate: workValues.length > 0,
+    hasActivity: hasActivity,
     periodCount: workValues.length,
     emptyPeriods: emptyPeriods
   };
