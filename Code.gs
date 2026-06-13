@@ -55,7 +55,7 @@ function installActivityTriggerManual() {
 
 function checkDailyActivityAndNotifyManual() {
   try {
-    const result = checkDailyActivityAndNotify(true);
+    const result = checkDailyActivityAndNotify();
     SpreadsheetApp.getUi().alert(result.message);
   } catch (error) {
     SpreadsheetApp.getUi().alert('ตรวจ Activity ไม่สำเร็จ: ' + error.message);
@@ -393,14 +393,13 @@ function installActivityTrigger() {
   console.log('Activity triggers installed for 18:00 and 20:00 Asia/Bangkok');
 }
 
-function checkDailyActivityAndNotify(forceSend) {
+function checkDailyActivityAndNotify() {
   const spreadsheet = getActivitySpreadsheet_();
   const timezone = spreadsheet.getSpreadsheetTimeZone() || 'Asia/Bangkok';
   const today = new Date();
   const todayKey = Utilities.formatDate(today, timezone, 'yyyy-MM-dd');
   const nonWorkingDay = getNonWorkingDayReason_(spreadsheet, today, timezone);
-  const isManualForce = forceSend === true;
-  if (!isManualForce && nonWorkingDay) {
+  if (nonWorkingDay) {
     const skipMessage = 'งดส่ง LINE: ' + nonWorkingDay;
     console.log(skipMessage);
     return {
