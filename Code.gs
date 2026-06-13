@@ -188,6 +188,18 @@ function createNextActivityDate() {
   const tomorrow = new Date();
   tomorrow.setHours(12, 0, 0, 0);
   tomorrow.setDate(tomorrow.getDate() + 1);
+  const nonWorkingDay = getNonWorkingDayReason_(spreadsheet, tomorrow, timezone);
+  if (nonWorkingDay) {
+    const skipMessage = 'ไม่สร้าง Activity วันที่ ' +
+      formatThaiDate_(tomorrow, timezone) + ': ' + nonWorkingDay;
+    console.log(skipMessage);
+    return {
+      created: false,
+      skipped: true,
+      results: [],
+      message: skipMessage
+    };
+  }
   const results = [];
 
   spreadsheet.getSheets().forEach(function(sheet) {
