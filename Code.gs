@@ -398,11 +398,12 @@ function checkDailyActivityAndNotify(forceSend) {
     activityStatuses.push({
       name: personName,
       completed: status.completed,
+      hasDate: status.hasDate,
       hasActivity: status.hasActivity
     });
     if (status.completed) {
       completedNames.push(personName);
-    } else if (status.hasActivity) {
+    } else if (status.hasDate && status.hasActivity) {
       incompleteNames.push(personName);
       missingNames.push(personName);
     } else {
@@ -434,7 +435,8 @@ function checkDailyActivityAndNotify(forceSend) {
       ') ผู้ใช้งานที่บันทึก Activity วันนี้'
   ];
   activityStatuses.forEach(function(status) {
-    const suffix = !status.completed && status.hasActivity ? ' (ไม่ครบ)' : '';
+    const suffix = !status.completed && status.hasDate && status.hasActivity ?
+      ' (ไม่ครบ)' : '';
     lines.push('• ' + status.name + suffix);
   });
 
