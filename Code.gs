@@ -441,9 +441,9 @@ function checkDailyActivityAndNotify(forceSend) {
     }).length +
       ') ผู้ใช้งานที่บันทึก Activity วันนี้'
   ];
-  (activityStatuses || []).forEach(function(status) {
-    const suffix = incompleteNames.indexOf(status.name) >= 0 ? ' (ไม่ครบ)' : '';
-    lines.push('• ' + status.name + suffix);
+  (missingNames || []).forEach(function(name) {
+    const suffix = incompleteNames.indexOf(name) >= 0 ? ' (ไม่ครบ)' : '';
+    lines.push('• ' + name + suffix);
   });
   console.log('Activity status detail: ' + JSON.stringify(activityStatuses));
 
