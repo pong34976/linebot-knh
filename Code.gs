@@ -529,18 +529,23 @@ function getActivityStatusForDate_(sheet, targetDateKey, timezone) {
   const values = sheet.getRange(
     firstDataRow, 1, lastRow - firstDataRow + 1, lastColumn
   ).getValues();
-  let currentDateKey = '';
   const workValues = [];
-
-  values.forEach(function(row) {
-    if (row[1] instanceof Date) {
-      currentDateKey = Utilities.formatDate(row[1], timezone, 'yyyy-MM-dd');
-    } else if (String(row[1] || '').trim()) {
-      currentDateKey = normalizeSheetDate_(row[1], timezone);
+  let blockStartIndex = -1;
+  for (let index = 0; index < values.length; index++) {
+    if (normalizeSheetDate_(values[index][1], timezone) === targetDateKey) {
+      blockStartIndex = index;
+      break;
     }
-    if (currentDateKey !== targetDateKey) return;
-    workValues.push(String(row[workColumn - 1] || '').trim());
-  });
+  }
+
+  if (blockStartIndex >= 0) {
+    for (let index = 0; index < 8 && blockStartIndex + index < values.length; index++) {
+      const row = values[blockStartIndex + index];
+      const explicitDateKey = normalizeSheetDate_(row[1], timezone);
+      if (index > 0 && explicitDateKey && explicitDateKey !== targetDateKey) break;
+      workValues.push(String(row[workColumn - 1] || '').trim());
+    }
+  }
 
   const hasEightPeriods = workValues.length >= 8;
   const emptyPeriods = workValues.filter(function(value) { return value === ''; }).length;
