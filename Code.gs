@@ -420,7 +420,7 @@ function checkDailyActivityAndNotify() {
   const lines = [
     '🔔 แจ้งเตือนการลง Activity',
     '',
-    'ผู้ใช้งานที่ยังไม่ได้บันทึก Activity วันนี้'
+    'ผู้ใช้งานที่บันทึก Activity วันนี้ไม่ครบ'
   ];
   missingNames.forEach(function(name) { lines.push('• ' + name); });
 
@@ -475,16 +475,16 @@ function getActivityStatusForDate_(sheet, targetDateKey, timezone) {
   const firstDataRow = findActivityFirstDataRow_(sheet);
   const lastRow = sheet.getLastRow();
   const lastColumn = sheet.getLastColumn();
-  if (firstDataRow > lastRow || lastColumn < 4) {
-    return { completed: false, hasDate: false };
+  const workColumn = findHeaderColumn_(sheet, 'งานที่ 1');
+  if (firstDataRow > lastRow || !workColumn) {
+    return { completed: false, hasDate: false, reason: 'ไม่พบคอลัมน์งานที่ 1' };
   }
 
   const values = sheet.getRange(
     firstDataRow, 1, lastRow - firstDataRow + 1, lastColumn
   ).getValues();
   let currentDateKey = '';
-  let hasDate = false;
-  let hasRealActivity = false;
+  const workValues = [];
 
   values.forEach(function(row) {
     if (row[1] instanceof Date) {
@@ -493,19 +493,30 @@ function getActivityStatusForDate_(sheet, targetDateKey, timezone) {
       currentDateKey = normalizeSheetDate_(row[1], timezone);
     }
     if (currentDateKey !== targetDateKey) return;
-
-    hasDate = true;
-    const activityStartColumn = sheet.getName() === 'Activity ปาลิกา' ? 2 : 3;
-    for (let column = activityStartColumn; column < row.length; column++) {
-      const value = String(row[column] || '').trim();
-      if (value && value !== 'ว่าง' && value !== 'พักกลางวัน') {
-        hasRealActivity = true;
-        break;
-      }
-    }
+    workValues.push(String(row[workColumn - 1] || '').trim());
   });
 
-  return { completed: hasDate && hasRealActivity, hasDate: hasDate };
+  const hasEightPeriods = workValues.length >= 8;
+  const emptyPeriods = workValues.filter(function(value) { return value === ''; }).length;
+  return {
+    completed: hasEightPeriods && emptyPeriods === 0,
+    hasDate: workValues.length > 0,
+    periodCount: workValues.length,
+    emptyPeriods: emptyPeriods
+  };
+}
+
+function findHeaderColumn_(sheet, headerText) {
+  const scanRows = Math.min(10, sheet.getLastRow());
+  const scanColumns = sheet.getLastColumn();
+  if (!scanRows || !scanColumns) return 0;
+  const headers = sheet.getRange(1, 1, scanRows, scanColumns).getDisplayValues();
+  for (let row = 0; row < headers.length; row++) {
+    for (let column = 0; column < headers[row].length; column++) {
+      if (String(headers[row][column] || '').trim() === headerText) return column + 1;
+    }
+  }
+  return 0;
 }
 
 function findActivityFirstDataRow_(sheet) {
